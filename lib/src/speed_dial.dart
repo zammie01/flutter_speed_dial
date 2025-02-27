@@ -595,29 +595,27 @@ class _ChildrensOverlay extends StatelessWidget {
   double _getStartingAngle() {
     switch (widget.direction) {
       case SpeedDialDirection.up:
-        return pi; // Left to right via up
+        return pi; // 180°: Left to right via up
       case SpeedDialDirection.down:
-        return 0; // Right to left via down
+        return 0; // 0°: Right to left via down
       case SpeedDialDirection.left:
-        return pi / 2; // Down to up via left
+        return pi / 2; // 90°: Down to up via left
       case SpeedDialDirection.right:
-        return 3 * pi / 2; // Up to down via right
+        return 3 * pi / 2; // 270°: Up to down via right
       default:
         return 0;
     }
   }
 
   double _getSpan() {
-    // For now, we'll use semi-circles (pi radians).
-    // You can extend this to return 2 * pi for a full circle if desired.
-    return pi;
+    return pi; // 180° span for a semi-circle
   }
 
   double _calculateAngle(int index) {
     final startingAngle = _getStartingAngle();
     final span = _getSpan();
     final n = widget.children.length;
-    if (n <= 1) return startingAngle; // Single child at starting angle
+    if (n <= 1) return startingAngle;
     final step = span / (n - 1);
     return startingAngle + index * step;
   }
@@ -626,13 +624,21 @@ class _ChildrensOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final animations = _getChildAnimations();
     final childrenList = _getChildrenList(animations);
+    final stackWidth =
+    widget.isCircular ? 2 * widget.radius + widget.childrenButtonSize.width : null;
+    final stackHeight =
+    widget.isCircular ? 2 * widget.radius + widget.childrenButtonSize.height : null;
 
     return Stack(
       fit: StackFit.loose,
       children: [
         Positioned(
           child: CompositedTransformFollower(
-            followerAnchor: widget.direction.isDown
+            link: layerLink,
+            showWhenUnlinked: false,
+            followerAnchor: widget.isCircular
+                ? Alignment.center
+                : (widget.direction.isDown
                 ? widget.switchLabelPosition
                 ? Alignment.topLeft
                 : Alignment.topRight
@@ -642,15 +648,17 @@ class _ChildrensOverlay extends StatelessWidget {
                 : Alignment.bottomRight
                 : widget.direction.isLeft
                 ? Alignment.centerRight
-                : Alignment.centerLeft,
-            offset: widget.direction.isDown
+                : Alignment.centerLeft),
+            offset: widget.isCircular
+                ? Offset.zero
+                : (widget.direction.isDown
                 ? Offset(
                 (widget.switchLabelPosition ||
                     dialKey.globalPaintBounds == null
                     ? 0
                     : dialKey.globalPaintBounds!.size.width) +
                     max(widget.childrenButtonSize.height - 56, 0) / 2,
-                dialKey.globalPaintBounds!.size.height)
+                dialKey.globalPaintBounds?.size.height ?? 0)
                 : widget.direction.isUp
                 ? Offset(
                 (widget.switchLabelPosition ||
@@ -666,26 +674,15 @@ class _ChildrensOverlay extends StatelessWidget {
                     ? 0
                     : dialKey.globalPaintBounds!.size.height / 2)
                 : Offset(
-                dialKey.globalPaintBounds!.size.width + 12,
-                dialKey.globalPaintBounds!.size.height / 2),
-            link: layerLink,
-            showWhenUnlinked: false,
+                dialKey.globalPaintBounds?.size.width ?? 0 + 12,
+                dialKey.globalPaintBounds == null
+                    ? 0
+                    : dialKey.globalPaintBounds!.size.height / 2)),
             child: Material(
               type: MaterialType.transparency,
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.direction.isUp || widget.direction.isDown
-                      ? max(widget.buttonSize.width - 56, 0) / 2
-                      : 0,
-                ),
-                margin: widget.spacing != null
-                    ? EdgeInsets.fromLTRB(
-                  widget.direction.isRight ? widget.spacing! : 0,
-                  widget.direction.isDown ? widget.spacing! : 0,
-                  widget.direction.isLeft ? widget.spacing! : 0,
-                  widget.direction.isUp ? widget.spacing! : 0,
-                )
-                    : null,
+                width: stackWidth,
+                height: stackHeight,
                 child: widget.isCircular
                     ? Stack(
                   children: List.generate(childrenList.length, (index) {
@@ -699,10 +696,16 @@ class _ChildrensOverlay extends StatelessWidget {
                         final dx = r * cos(angle);
                         final dy = r * sin(angle);
                         return Positioned(
-                          left: dx -
-                              widget.childrenButtonSize.width / 2,
-                          top: dy -
-                              widget.childrenButtonSize.height / 2,
+                          left: widget.isCircular && stackWidth != null
+                              ? stackWidth / 2 +
+                              dx -
+                              widget.childrenButtonSize.width / 2
+                              : dx,
+                          top: widget.isCircular && stackHeight != null
+                              ? stackHeight / 2 +
+                              dy -
+                              widget.childrenButtonSize.height / 2
+                              : dy,
                           child: childWidget!,
                         );
                       },
