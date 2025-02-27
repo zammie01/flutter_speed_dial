@@ -160,6 +160,13 @@ class SpeedDial extends StatefulWidget {
   /// and the child.
   final Widget? activeChild;
 
+
+  /// Whether to arrange children in a circular layout instead of linear.
+  final bool isCircular;
+
+  /// The radius for circular arrangement of children.
+  final double radius;
+
   final bool switchLabelPosition;
 
   /// This is the animation of the child of the FAB, if specified it will animate b/w this
@@ -172,6 +179,8 @@ class SpeedDial extends StatefulWidget {
     Key? key,
     this.children = const [],
     this.visible = true,
+    this.isCircular = false, // Default to linear arrangement
+    this.radius = 100.0,     // Default radius for circular arrangement
     this.backgroundColor,
     this.foregroundColor,
     this.activeBackgroundColor,
@@ -524,141 +533,198 @@ class _ChildrensOverlay extends StatelessWidget {
   final Function toggleChildren;
   final Curve? animationCurve;
 
-  List<Widget> _getChildrenList() {
-    return widget.children
-        .map((SpeedDialChild child) {
-          int index = widget.children.indexOf(child);
+  List<Animation<double>> _getChildAnimations() {
+    return List.generate(
+      widget.children.length,
+          (index) => Tween(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: controller,
+          curve: Interval(
+            index / widget.children.length,
+            1.0,
+            curve: widget.animationCurve ?? Curves.ease,
+          ),
+        ),
+      ),
+    );
+  }
 
-          return AnimatedChild(
-            animation: Tween(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(
-                parent: controller,
-                curve: Interval(
-                  index / widget.children.length,
-                  1.0,
-                  curve: widget.animationCurve ?? Curves.ease,
-                ),
-              ),
-            ),
-            index: index,
-            margin: widget.spaceBetweenChildren != null
-                ? EdgeInsets.fromLTRB(
-                    widget.direction.isRight ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isDown ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isLeft ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isUp ? widget.spaceBetweenChildren! : 0,
-                  )
-                : null,
-            btnKey: child.key,
-            useColumn: widget.direction.isLeft || widget.direction.isRight,
-            visible: child.visible,
-            switchLabelPosition: widget.switchLabelPosition,
-            backgroundColor: child.backgroundColor,
-            foregroundColor: child.foregroundColor,
-            elevation: child.elevation,
-            buttonSize: widget.childrenButtonSize,
-            label: child.label,
-            labelStyle: child.labelStyle,
-            labelBackgroundColor: child.labelBackgroundColor,
-            labelWidget: child.labelWidget,
-            labelShadow: child.labelShadow,
-            onTap: child.onTap,
-            onLongPress: child.onLongPress,
-            toggleChildren: () {
-              if (!widget.closeManually) toggleChildren();
-            },
-            shape: child.shape,
-            heroTag: widget.heroTag != null
-                ? '${widget.heroTag}-child-$index'
-                : null,
-            childMargin: widget.childMargin,
-            childPadding: widget.childPadding,
-            child: child.child,
-          );
-        })
-        .toList()
-        .reversed
-        .toList();
+  List<Widget> _getChildrenList(List<Animation<double>> animations) {
+    return widget.children.map((SpeedDialChild child) {
+      int index = widget.children.indexOf(child);
+      return AnimatedChild(
+        animation: animations[index],
+        index: index,
+        margin: widget.spaceBetweenChildren != null && !widget.isCircular
+            ? EdgeInsets.fromLTRB(
+          widget.direction.isRight ? widget.spaceBetweenChildren! : 0,
+          widget.direction.isDown ? widget.spaceBetweenChildren! : 0,
+          widget.direction.isLeft ? widget.spaceBetweenChildren! : 0,
+          widget.direction.isUp ? widget.spaceBetweenChildren! : 0,
+        )
+            : null,
+        btnKey: child.key,
+        useColumn: widget.direction.isLeft || widget.direction.isRight,
+        visible: child.visible,
+        switchLabelPosition: widget.switchLabelPosition,
+        backgroundColor: child.backgroundColor,
+        foregroundColor: child.foregroundColor,
+        elevation: child.elevation,
+        buttonSize: widget.childrenButtonSize,
+        label: child.label,
+        labelStyle: child.labelStyle,
+        labelBackgroundColor: child.labelBackgroundColor,
+        labelWidget: child.labelWidget,
+        labelShadow: child.labelShadow,
+        onTap: child.onTap,
+        onLongPress: child.onLongPress,
+        toggleChildren: () {
+          if (!widget.closeManually) toggleChildren();
+        },
+        shape: child.shape,
+        heroTag: widget.heroTag != null
+            ? '${widget.heroTag}-child-$index'
+            : null,
+        childMargin: widget.childMargin,
+        childPadding: widget.childPadding,
+        child: child.child,
+      );
+    }).toList().reversed.toList();
+  }
+
+  double _getStartingAngle() {
+    switch (widget.direction) {
+      case SpeedDialDirection.up:
+        return pi; // Left to right via up
+      case SpeedDialDirection.down:
+        return 0; // Right to left via down
+      case SpeedDialDirection.left:
+        return pi / 2; // Down to up via left
+      case SpeedDialDirection.right:
+        return 3 * pi / 2; // Up to down via right
+      default:
+        return 0;
+    }
+  }
+
+  double _getSpan() {
+    // For now, we'll use semi-circles (pi radians).
+    // You can extend this to return 2 * pi for a full circle if desired.
+    return pi;
+  }
+
+  double _calculateAngle(int index) {
+    final startingAngle = _getStartingAngle();
+    final span = _getSpan();
+    final n = widget.children.length;
+    if (n <= 1) return startingAngle; // Single child at starting angle
+    final step = span / (n - 1);
+    return startingAngle + index * step;
   }
 
   @override
   Widget build(BuildContext context) {
+    final animations = _getChildAnimations();
+    final childrenList = _getChildrenList(animations);
+
     return Stack(
       fit: StackFit.loose,
       children: [
         Positioned(
-            child: CompositedTransformFollower(
-          followerAnchor: widget.direction.isDown
-              ? widget.switchLabelPosition
-                  ? Alignment.topLeft
-                  : Alignment.topRight
-              : widget.direction.isUp
-                  ? widget.switchLabelPosition
-                      ? Alignment.bottomLeft
-                      : Alignment.bottomRight
-                  : widget.direction.isLeft
-                      ? Alignment.centerRight
-                      : widget.direction.isRight
-                          ? Alignment.centerLeft
-                          : Alignment.center,
-          offset: widget.direction.isDown
-              ? Offset(
-                  (widget.switchLabelPosition ||
-                              dialKey.globalPaintBounds == null
-                          ? 0
-                          : dialKey.globalPaintBounds!.size.width) +
-                      max(widget.childrenButtonSize.height - 56, 0) / 2,
-                  dialKey.globalPaintBounds!.size.height)
-              : widget.direction.isUp
-                  ? Offset(
-                      (widget.switchLabelPosition ||
-                                  dialKey.globalPaintBounds == null
-                              ? 0
-                              : dialKey.globalPaintBounds!.size.width) +
-                          max(widget.childrenButtonSize.width - 56, 0) / 2,
-                      0)
-                  : widget.direction.isLeft
-                      ? Offset(
-                          -10.0,
-                          dialKey.globalPaintBounds == null
-                              ? 0
-                              : dialKey.globalPaintBounds!.size.height / 2)
-                      : widget.direction.isRight &&
-                              dialKey.globalPaintBounds != null
-                          ? Offset(dialKey.globalPaintBounds!.size.width + 12,
-                              dialKey.globalPaintBounds!.size.height / 2)
-                          : const Offset(-10.0, 0.0),
-          link: layerLink,
-          showWhenUnlinked: false,
-          child: Material(
-            type: MaterialType.transparency,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: widget.direction.isUp || widget.direction.isDown
-                    ? max(widget.buttonSize.width - 56, 0) / 2
-                    : 0,
-              ),
-              margin: widget.spacing != null
-                  ? EdgeInsets.fromLTRB(
-                      widget.direction.isRight ? widget.spacing! : 0,
-                      widget.direction.isDown ? widget.spacing! : 0,
-                      widget.direction.isLeft ? widget.spacing! : 0,
-                      widget.direction.isUp ? widget.spacing! : 0,
-                    )
-                  : null,
-              child: _buildColumnOrRow(
-                widget.direction.isUp || widget.direction.isDown,
-                crossAxisAlignment: widget.switchLabelPosition
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: widget.direction.isDown || widget.direction.isRight
-                    ? _getChildrenList().reversed.toList()
-                    : _getChildrenList(),
+          child: CompositedTransformFollower(
+            followerAnchor: widget.direction.isDown
+                ? widget.switchLabelPosition
+                ? Alignment.topLeft
+                : Alignment.topRight
+                : widget.direction.isUp
+                ? widget.switchLabelPosition
+                ? Alignment.bottomLeft
+                : Alignment.bottomRight
+                : widget.direction.isLeft
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            offset: widget.direction.isDown
+                ? Offset(
+                (widget.switchLabelPosition ||
+                    dialKey.globalPaintBounds == null
+                    ? 0
+                    : dialKey.globalPaintBounds!.size.width) +
+                    max(widget.childrenButtonSize.height - 56, 0) / 2,
+                dialKey.globalPaintBounds!.size.height)
+                : widget.direction.isUp
+                ? Offset(
+                (widget.switchLabelPosition ||
+                    dialKey.globalPaintBounds == null
+                    ? 0
+                    : dialKey.globalPaintBounds!.size.width) +
+                    max(widget.childrenButtonSize.width - 56, 0) / 2,
+                0)
+                : widget.direction.isLeft
+                ? Offset(
+                -10.0,
+                dialKey.globalPaintBounds == null
+                    ? 0
+                    : dialKey.globalPaintBounds!.size.height / 2)
+                : Offset(
+                dialKey.globalPaintBounds!.size.width + 12,
+                dialKey.globalPaintBounds!.size.height / 2),
+            link: layerLink,
+            showWhenUnlinked: false,
+            child: Material(
+              type: MaterialType.transparency,
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.direction.isUp || widget.direction.isDown
+                      ? max(widget.buttonSize.width - 56, 0) / 2
+                      : 0,
+                ),
+                margin: widget.spacing != null
+                    ? EdgeInsets.fromLTRB(
+                  widget.direction.isRight ? widget.spacing! : 0,
+                  widget.direction.isDown ? widget.spacing! : 0,
+                  widget.direction.isLeft ? widget.spacing! : 0,
+                  widget.direction.isUp ? widget.spacing! : 0,
+                )
+                    : null,
+                child: widget.isCircular
+                    ? Stack(
+                  children: List.generate(childrenList.length, (index) {
+                    final child = childrenList[index];
+                    final animation = animations[index];
+                    return AnimatedBuilder(
+                      animation: animation,
+                      builder: (context, childWidget) {
+                        final angle = _calculateAngle(index);
+                        final r = widget.radius * animation.value;
+                        final dx = r * cos(angle);
+                        final dy = r * sin(angle);
+                        return Positioned(
+                          left: dx -
+                              widget.childrenButtonSize.width / 2,
+                          top: dy -
+                              widget.childrenButtonSize.height / 2,
+                          child: childWidget!,
+                        );
+                      },
+                      child: child,
+                    );
+                  }),
+                )
+                    : _buildColumnOrRow(
+                  widget.direction.isUp || widget.direction.isDown,
+                  crossAxisAlignment: widget.switchLabelPosition
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: widget.direction.isDown ||
+                      widget.direction.isRight
+                      ? childrenList.reversed.toList()
+                      : childrenList,
+                ),
               ),
             ),
           ),
-        )),
+        ),
       ],
     );
   }
