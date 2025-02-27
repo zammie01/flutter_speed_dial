@@ -27,6 +27,7 @@ class AnimatedChild extends AnimatedWidget {
 
   final EdgeInsets childMargin;
   final EdgeInsets childPadding;
+  final Offset? customPosition; // New parameter for semicircle positioning
 
   const AnimatedChild({
     Key? key,
@@ -47,13 +48,14 @@ class AnimatedChild extends AnimatedWidget {
     this.onTap,
     required this.switchLabelPosition,
     required this.useColumn,
-    required this.margin,
+    this.margin,
     this.onLongPress,
     this.toggleChildren,
     this.shape,
     this.heroTag,
     required this.childMargin,
     required this.childPadding,
+    this.customPosition,
   }) : super(key: key, listenable: animation);
 
   @override
@@ -67,7 +69,7 @@ class AnimatedChild extends AnimatedWidget {
       } else if (onLongPress != null && isLong) {
         onLongPress!();
       }
-      toggleChildren!();
+      toggleChildren?.call();
     }
 
     Widget buildLabel() {
@@ -107,7 +109,7 @@ class AnimatedChild extends AnimatedWidget {
             child: InkWell(
               onTap: performAction,
               onLongPress:
-                  onLongPress == null ? null : () => performAction(true),
+              onLongPress == null ? null : () => performAction(true),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 5.0,
@@ -121,81 +123,64 @@ class AnimatedChild extends AnimatedWidget {
       );
     }
 
-    Widget button = ScaleTransition(
-        scale: animation,
-        child: FloatingActionButton(
-          key: btnKey,
-          heroTag: heroTag,
-          onPressed: performAction,
-          backgroundColor:
-              backgroundColor ?? (dark ? Colors.grey[800] : Colors.grey[50]),
-          foregroundColor:
-              foregroundColor ?? (dark ? Colors.white : Colors.black),
-          elevation: elevation ?? 6.0,
-          shape: shape,
-          child: child,
-        ));
+    Widget button = FloatingActionButton(
+      key: btnKey,
+      heroTag: heroTag,
+      onPressed: performAction,
+      backgroundColor:
+      backgroundColor ?? (dark ? Colors.grey[800] : Colors.grey[50]),
+      foregroundColor:
+      foregroundColor ?? (dark ? Colors.white : Colors.black),
+      elevation: elevation ?? 6.0,
+      shape: shape,
+      mini: buttonSize != const Size(56.0, 56.0),
+      child: child,
+    );
 
-    List<Widget> children = [
-      if (label != null || labelWidget != null)
-        ScaleTransition(
+    // Combine button and label into a single widget
+    Widget childContent = useColumn
+        ? Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+      switchLabelPosition ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: switchLabelPosition
+          ? [if (label != null || labelWidget != null) buildLabel(), if (child != null) button]
+          : [if (child != null) button, if (label != null || labelWidget != null) buildLabel()],
+    )
+        : Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+      switchLabelPosition ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: switchLabelPosition
+          ? [if (label != null || labelWidget != null) buildLabel(), if (child != null) button]
+          : [if (child != null) button, if (label != null || labelWidget != null) buildLabel()],
+    );
+
+    // Apply animation and positioning
+    return visible
+        ? Positioned(
+      left: customPosition?.dx != null
+          ? (customPosition!.dx! + buttonSize.width / 2) // Center the child
+          : null,
+      top: customPosition?.dy != null
+          ? (customPosition!.dy! + buttonSize.height / 2) // Center the child
+          : null,
+      child: FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
           scale: animation,
           child: Container(
-            padding: (child == null)
-                ? const EdgeInsets.symmetric(vertical: 8)
-                : null,
-            key: (child == null) ? btnKey : null,
-            child: buildLabel(),
+            margin: margin,
+            child: onLongPress == null
+                ? childContent
+                : GestureDetector(
+              onLongPress: () => performAction(true),
+              child: childContent,
+            ),
           ),
         ),
-      if (child != null)
-        Container(
-          padding: childPadding,
-          height: buttonSize.height,
-          width: buttonSize.width,
-          child: (onLongPress == null)
-              ? button
-              : FittedBox(
-                  child: GestureDetector(
-                    onLongPress: () => performAction(true),
-                    child: button,
-                  ),
-                ),
-        )
-    ];
-
-    Widget buildColumnOrRow(bool isColumn,
-        {CrossAxisAlignment? crossAxisAlignment,
-        MainAxisAlignment? mainAxisAlignment,
-        required List<Widget> children,
-        MainAxisSize? mainAxisSize}) {
-      return isColumn
-          ? Column(
-              mainAxisSize: mainAxisSize ?? MainAxisSize.max,
-              mainAxisAlignment: mainAxisAlignment ?? MainAxisAlignment.start,
-              crossAxisAlignment:
-                  crossAxisAlignment ?? CrossAxisAlignment.center,
-              children: children,
-            )
-          : Row(
-              mainAxisSize: mainAxisSize ?? MainAxisSize.max,
-              mainAxisAlignment: mainAxisAlignment ?? MainAxisAlignment.start,
-              crossAxisAlignment:
-                  crossAxisAlignment ?? CrossAxisAlignment.center,
-              children: children,
-            );
-    }
-
-    return visible
-        ? Container(
-            margin: margin,
-            child: buildColumnOrRow(
-              useColumn,
-              mainAxisSize: MainAxisSize.min,
-              children:
-                  switchLabelPosition ? children.reversed.toList() : children,
-            ),
-          )
+      ),
+    )
         : Container();
   }
 }

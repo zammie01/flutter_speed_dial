@@ -524,61 +524,73 @@ class _ChildrensOverlay extends StatelessWidget {
   final Function toggleChildren;
   final Curve? animationCurve;
 
-  List<Widget> _getChildrenList() {
-    return widget.children
-        .map((SpeedDialChild child) {
-          int index = widget.children.indexOf(child);
+  List<Widget> _getChildrenList(BuildContext context) {
+    final totalChildren = widget.children.length;
+    // Define the angle range for the semicircle (e.g., 180 degrees)
+    const double totalAngle = pi; // 180 degrees for a semicircle
+    final double angleStep = totalAngle / (totalChildren > 1 ? totalChildren - 1 : 1);
+    const double radius = 80.0; // Adjust this for the semicircle size
 
-          return AnimatedChild(
-            animation: Tween(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(
-                parent: controller,
-                curve: Interval(
-                  index / widget.children.length,
-                  1.0,
-                  curve: widget.animationCurve ?? Curves.ease,
-                ),
-              ),
+    return widget.children.map((SpeedDialChild child) {
+      int index = widget.children.indexOf(child);
+      // Calculate the angle for this child based on direction
+      double angle;
+      switch (widget.direction) {
+        case SpeedDialDirection.up:
+          angle = pi / 2 - (totalAngle / 2) + (index * angleStep); // Center at top
+          break;
+        case SpeedDialDirection.down:
+          angle = -pi / 2 - (totalAngle / 2) + (index * angleStep); // Center at bottom
+          break;
+        case SpeedDialDirection.left:
+          angle = pi - (totalAngle / 2) + (index * angleStep); // Center at left
+          break;
+        case SpeedDialDirection.right:
+          angle = 0 - (totalAngle / 2) + (index * angleStep); // Center at right
+          break;
+      }
+
+      // Calculate x, y coordinates using polar coordinates
+      double dx = radius * cos(angle);
+      double dy = radius * sin(angle);
+
+      return AnimatedChild(
+        animation: Tween(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(
+            parent: controller,
+            curve: Interval(
+              index / totalChildren,
+              1.0,
+              curve: widget.animationCurve ?? Curves.ease,
             ),
-            index: index,
-            margin: widget.spaceBetweenChildren != null
-                ? EdgeInsets.fromLTRB(
-                    widget.direction.isRight ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isDown ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isLeft ? widget.spaceBetweenChildren! : 0,
-                    widget.direction.isUp ? widget.spaceBetweenChildren! : 0,
-                  )
-                : null,
-            btnKey: child.key,
-            useColumn: widget.direction.isLeft || widget.direction.isRight,
-            visible: child.visible,
-            switchLabelPosition: widget.switchLabelPosition,
-            backgroundColor: child.backgroundColor,
-            foregroundColor: child.foregroundColor,
-            elevation: child.elevation,
-            buttonSize: widget.childrenButtonSize,
-            label: child.label,
-            labelStyle: child.labelStyle,
-            labelBackgroundColor: child.labelBackgroundColor,
-            labelWidget: child.labelWidget,
-            labelShadow: child.labelShadow,
-            onTap: child.onTap,
-            onLongPress: child.onLongPress,
-            toggleChildren: () {
-              if (!widget.closeManually) toggleChildren();
-            },
-            shape: child.shape,
-            heroTag: widget.heroTag != null
-                ? '${widget.heroTag}-child-$index'
-                : null,
-            childMargin: widget.childMargin,
-            childPadding: widget.childPadding,
-            child: child.child,
-          );
-        })
-        .toList()
-        .reversed
-        .toList();
+          ),
+        ),
+        index: index,
+        btnKey: child.key,
+        visible: child.visible,
+        backgroundColor: child.backgroundColor,
+        foregroundColor: child.foregroundColor,
+        elevation: child.elevation,
+        buttonSize: widget.childrenButtonSize,
+        label: child.label,
+        labelStyle: child.labelStyle,
+        labelBackgroundColor: child.labelBackgroundColor,
+        labelWidget: child.labelWidget,
+        labelShadow: child.labelShadow,
+        onTap: child.onTap,
+        onLongPress: child.onLongPress,
+        toggleChildren: () {
+          if (!widget.closeManually) toggleChildren();
+        },
+        shape: child.shape,
+        heroTag: widget.heroTag != null ? '${widget.heroTag}-child-$index' : null,
+        childMargin: widget.childMargin,
+        childPadding: widget.childPadding,
+        child: child.child,
+        // Position the child in the semicircle
+        customPosition: Offset(dx, dy), switchLabelPosition: false, useColumn: false,
+      );
+    }).toList();
   }
 
   @override
@@ -587,78 +599,22 @@ class _ChildrensOverlay extends StatelessWidget {
       fit: StackFit.loose,
       children: [
         Positioned(
-            child: CompositedTransformFollower(
-          followerAnchor: widget.direction.isDown
-              ? widget.switchLabelPosition
-                  ? Alignment.topLeft
-                  : Alignment.topRight
-              : widget.direction.isUp
-                  ? widget.switchLabelPosition
-                      ? Alignment.bottomLeft
-                      : Alignment.bottomRight
-                  : widget.direction.isLeft
-                      ? Alignment.centerRight
-                      : widget.direction.isRight
-                          ? Alignment.centerLeft
-                          : Alignment.center,
-          offset: widget.direction.isDown
-              ? Offset(
-                  (widget.switchLabelPosition ||
-                              dialKey.globalPaintBounds == null
-                          ? 0
-                          : dialKey.globalPaintBounds!.size.width) +
-                      max(widget.childrenButtonSize.height - 56, 0) / 2,
-                  dialKey.globalPaintBounds!.size.height)
-              : widget.direction.isUp
-                  ? Offset(
-                      (widget.switchLabelPosition ||
-                                  dialKey.globalPaintBounds == null
-                              ? 0
-                              : dialKey.globalPaintBounds!.size.width) +
-                          max(widget.childrenButtonSize.width - 56, 0) / 2,
-                      0)
-                  : widget.direction.isLeft
-                      ? Offset(
-                          -10.0,
-                          dialKey.globalPaintBounds == null
-                              ? 0
-                              : dialKey.globalPaintBounds!.size.height / 2)
-                      : widget.direction.isRight &&
-                              dialKey.globalPaintBounds != null
-                          ? Offset(dialKey.globalPaintBounds!.size.width + 12,
-                              dialKey.globalPaintBounds!.size.height / 2)
-                          : const Offset(-10.0, 0.0),
-          link: layerLink,
-          showWhenUnlinked: false,
-          child: Material(
-            type: MaterialType.transparency,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: widget.direction.isUp || widget.direction.isDown
-                    ? max(widget.buttonSize.width - 56, 0) / 2
-                    : 0,
-              ),
-              margin: widget.spacing != null
-                  ? EdgeInsets.fromLTRB(
-                      widget.direction.isRight ? widget.spacing! : 0,
-                      widget.direction.isDown ? widget.spacing! : 0,
-                      widget.direction.isLeft ? widget.spacing! : 0,
-                      widget.direction.isUp ? widget.spacing! : 0,
-                    )
-                  : null,
-              child: _buildColumnOrRow(
-                widget.direction.isUp || widget.direction.isDown,
-                crossAxisAlignment: widget.switchLabelPosition
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: widget.direction.isDown || widget.direction.isRight
-                    ? _getChildrenList().reversed.toList()
-                    : _getChildrenList(),
+          child: CompositedTransformFollower(
+            link: layerLink,
+            showWhenUnlinked: false,
+            offset: Offset(
+              widget.buttonSize.width / 2, // Center on FAB horizontally
+              widget.buttonSize.height / 2, // Center on FAB vertically
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Stack(
+                alignment: Alignment.center,
+                children: _getChildrenList(context),
               ),
             ),
           ),
-        )),
+        ),
       ],
     );
   }
